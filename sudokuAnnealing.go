@@ -37,8 +37,8 @@ import (
 )
 
 // Modified from https://stackoverflow.com/questions/9862443/golang-is-there-a-better-way-read-a-file-of-integers-into-an-array
-// Read in the start state of the sudoku puzzle (of arbitrary dimension)
-func readInOneLine(r io.Reader, line int, blockXDim int, blockYDim int) (puzzle [][]int, e error) {
+// Read in the start state of the sudoku puzzle (of arbitrary dimension) in a single line presentation.
+func readInOneLine(r io.Reader, line int, delimiter string, emptyValue string, blockXDim int, blockYDim int) (puzzle [][]int, e error) {
 
 	scanner := bufio.NewScanner(r)
 	scanner.Split(bufio.ScanLines)
@@ -54,17 +54,18 @@ func readInOneLine(r io.Reader, line int, blockXDim int, blockYDim int) (puzzle 
 
 			// Read the puzzle text in and split it into it's components
 			puzzleText := scanner.Text()
-			puzzleElements := strings.Split(puzzleText, "")
+			puzzleElements := strings.Split(puzzleText, delimiter)
 			puzzleDim := blockXDim * blockYDim
 			puzzle = make([][]int, puzzleDim)
 
 			for i := 0; i < puzzleDim; i++ {
 				puzzle[i] = make([]int, puzzleDim)
 				for j := 0; j < puzzleDim; j++ {
-					value, err := strconv.Atoi(puzzleElements[(i*puzzleDim)+j])
+					element := puzzleElements[(i*puzzleDim)+j]
+					value, err := strconv.Atoi(element)
 					if err == nil {
 						puzzle[i][j] = value
-					} else {
+					} else if element == emptyValue {
 						puzzle[i][j] = 0
 					}
 				}
@@ -77,26 +78,49 @@ func readInOneLine(r io.Reader, line int, blockXDim int, blockYDim int) (puzzle 
 	return puzzle, scanner.Err()
 }
 
+// return the number of digits in an int up to 4. Sudoku puzzles of greater than
+// 9999*9999 are probably not practical.
+func numDigits(n int) int {
+    if n < 0 {
+			n = -1 * n
+		}
+    if n < 10 {
+			return 1
+		}
+    if n < 100 {
+			return 2
+		}
+    if n < 1000 {
+			return 3
+		}
+
+    return 4
+}
+
 
 func printPuzzle(puzzle [][]int, blockXDim int, blockYDim int) {
 
+	width := numDigits(blockXDim * blockYDim)
+
 	for r := range puzzle {
 		if r > 0 && r % blockYDim == 0 {
-			fmt.Printf("---------------------\n")
+			for i := 0; i < (blockXDim - 1) + (width + 2) * blockXDim * blockYDim; i++ {
+				fmt.Printf("%s", "-")
+			}
+			fmt.Println()
 		}
 		for c := range puzzle[r] {
 			if c > 0 && c % blockXDim == 0 {
-				fmt.Printf("| ")
+				fmt.Printf("|")
 			}
 			if puzzle[r][c] > 0 {
-				fmt.Printf("%v ", puzzle[r][c])
+				fmt.Printf("%-*s%d ", width - numDigits(puzzle[r][c]) + 1, " ", puzzle[r][c])
 			} else {
-				fmt.Printf("  ")
+				fmt.Printf("%-*s ", width + 1, " ")
 			}
 		}
 		fmt.Printf("\n")
 	}
-
 }
 
 // Starts n annealing goroutines at exponentially increasing temperatures 2^n where n is defined by the
@@ -386,6 +410,8 @@ func main() {
 	start := time.Now()
 
 	inputModePtr := flag.String("m", "one-line", "An input mode used to interpret the input file")
+	delimiterPtr := flag.String("del", "", "The delimeter used to separate the puzzle squares in the input")
+	emptyValuePtr := flag.String("e", ".", "The character used to indicate an empty square in the puzzle")
 	dimPtr := flag.String("d", "3x3", "The dimensions of one of the puzzle blocks (eg. standard sudoku is 3x3)")
 	filePtr := flag.String("f", "puzzles.txt", "The filename to be checked")
 	linePtr := flag.String("l", "1", "The line of the puzzle to be solved")
@@ -419,7 +445,7 @@ func main() {
 
 	if *inputModePtr == "one-line" {
 		// Read the file into an array
-		originalPuzzle, err = readInOneLine(inFile, puzzleLine, blockXDim, blockYDim)
+		originalPuzzle, err = readInOneLine(inFile, puzzleLine, *delimiterPtr, *emptyValuePtr, blockXDim, blockYDim)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
